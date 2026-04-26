@@ -98,6 +98,16 @@ def init_db(db_path: Path = DB_PATH) -> None:
             created_at      TEXT    NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS llm_usage (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            model           TEXT    NOT NULL,
+            category        TEXT    NOT NULL,
+            input_tokens    INTEGER DEFAULT 0,
+            output_tokens   INTEGER DEFAULT 0,
+            total_tokens    INTEGER DEFAULT 0,
+            created_at      TEXT    NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_products_run ON products(run_id);
         CREATE INDEX IF NOT EXISTS idx_niches_run ON niches(run_id);
         CREATE INDEX IF NOT EXISTS idx_niches_score ON niches(flywheel_score DESC);

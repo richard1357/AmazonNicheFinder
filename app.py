@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from src.agents.gap_analyst import get_usage_summary
 from src.config import BSR_MAX, BSR_MIN, DATA_SOURCE, LLM_MODE
 from src.data.mock_amazon import get_available_categories
 from src.db.models import (
@@ -58,6 +59,18 @@ with st.sidebar:
 
     st.subheader("⚙️ Configuration")
     st.info(f"**Data Source:** {DATA_SOURCE}\n\n**LLM Mode:** {LLM_MODE}")
+
+    if LLM_MODE == "gemini":
+        usage = get_usage_summary()
+        if usage["calls"] > 0:
+            st.subheader("📊 Gemini Usage")
+            ucol1, ucol2 = st.columns(2)
+            with ucol1:
+                st.metric("API Calls", usage["calls"])
+                st.metric("Input Tokens", f"{usage['input_tokens']:,}")
+            with ucol2:
+                st.metric("Output Tokens", f"{usage['output_tokens']:,}")
+                st.metric("Total Tokens", f"{usage['total_tokens']:,}")
 
     st.divider()
 

@@ -32,4 +32,4 @@ DATA_SOURCE: str = os.environ.get("DATA_SOURCE", "mock")
 # ---------- LLM Mode ----------
 # "gemini" | "mock"
 LLM_MODE: str = "gemini" if GEMINI_API_KEY else "mock"
-GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")

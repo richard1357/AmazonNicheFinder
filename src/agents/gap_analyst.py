@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import TypedDict
 
 from src.config import GEMINI_API_KEY, GEMINI_MODEL, LLM_MODE
+
+logger = logging.getLogger(__name__)
 
 
 class GapAnalysis(TypedDict):
@@ -75,6 +78,17 @@ def _call_gemini(category: str, reviews: list[dict]) -> GapAnalysis:
             max_output_tokens=4096,
         ),
     )
+
+    # --- Usage tracking ---
+    usage = getattr(response, "usage_metadata", None)
+    input_tokens = getattr(usage, "prompt_token_count", 0) if usage else 0
+    output_tokens = getattr(usage, "candidates_token_count", 0) if usage else 0
+    total_tokens = getattr(usage, "total_token_count", 0) if usage else 0
+    logger.info(
+        "Gemini usage: model=%s input_tokens=%d output_tokens=%d total_tokens=%d",
+        GEMINI_MODEL, input_tokens, output_tokens, total_tokens,
+    )
+    _record_usage(category, input_tokens, output_tokens, total_tokens)
 
     text = response.text.strip()
     if "```json" in text:
@@ -211,13 +225,51 @@ Books that combine practical exercises with modern, updated content have the hig
     )
 
 
+def _record_usage(
+    category: str, input_tokens: int, output_tokens: int, total_tokens: int
+) -> None:
+    """Persist Gemini token usage to the llm_usage table."""
+    try:
+        from src.db.models import get_connection
+
+        conn = get_connection()
+        conn.execute(
+            "INSERT INTO llm_usage (model, category, input_tokens, output_tokens, total_tokens, created_at) "
+            "VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            (GEMINI_MODEL, category, input_tokens, output_tokens, total_tokens),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        logger.warning("Failed to record LLM usage: %s", exc)
+
+
+def get_usage_summary() -> dict:
+    """Return cumulative Gemini token usage across all runs."""
+    try:
+        from src.db.models import get_connection
+
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT COUNT(*) as calls, "
+            "COALESCE(SUM(input_tokens), 0) as input_tokens, "
+            "COALESCE(SUM(output_tokens), 0) as output_tokens, "
+            "COALESCE(SUM(total_tokens), 0) as total_tokens "
+            "FROM llm_usage"
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else {"calls": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    except Exception:
+        return {"calls": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+
 def run_gap_analyst(category: str, reviews: list[dict]) -> GapAnalysis:
     """Analyze reviews to find content gaps. Uses Gemini if available, mock otherwise."""
     if LLM_MODE == "gemini":
         try:
             return _call_gemini(category, reviews)
         except Exception as e:
-            print(f"Gemini API failed ({e}), falling back to mock analysis")
+            logger.warning("Gemini API failed (%s), falling back to mock analysis", e)
             return _mock_analysis(category, reviews)
     else:
         return _mock_analysis(category, reviews)
